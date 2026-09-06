@@ -81,20 +81,28 @@ class TextApp:
             started = self._started
 
         canvas.clear()
-        w = text_width(msg.text, msg.font)
-        _, fh = fonts.size(msg.font)
-        y = (self.height - fh) // 2
-        elapsed = now - started
-
-        if w <= self.width:
-            canvas.text((self.width - w) // 2, y, msg.text, msg.color, msg.font)
-            done = elapsed >= self.dwell_s
-        else:
-            x = int(round(self.width - elapsed * self.scroll_pps))
-            canvas.text(x, y, msg.text, msg.color, msg.font)
-            done = x + w < 0
+        try:
+            done = self._draw(canvas, msg, now - started)
+        except Exception:
+            # drop the message so it can't re-throw every frame
+            with self._lock:
+                if self._current is msg:
+                    self._current = None
+            raise
 
         if done:
             with self._lock:
                 if self._current is msg:
                     self._current = None
+
+    def _draw(self, canvas: Canvas, msg: Message, elapsed: float) -> bool:
+        """Draw `msg` for this frame. Returns True once it has finished showing."""
+        w = text_width(msg.text, msg.font)
+        _, fh = fonts.size(msg.font)
+        y = (self.height - fh) // 2
+        if w <= self.width:
+            canvas.text((self.width - w) // 2, y, msg.text, msg.color, msg.font)
+            return elapsed >= self.dwell_s
+        x = int(round(self.width - elapsed * self.scroll_pps))
+        canvas.text(x, y, msg.text, msg.color, msg.font)
+        return x + w < 0

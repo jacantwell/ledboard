@@ -58,7 +58,11 @@ class Scheduler:
         if app is None:
             self.canvas.clear()
         else:
-            app.render(self.canvas, now)
+            try:
+                app.render(self.canvas, now)
+            except Exception:  # noqa: BLE001 - one bad app must not kill the panel
+                log.exception("%s.render failed, blanking this frame", app.name)
+                self.canvas.clear()
         np.take(self._lut, self.canvas.fb, out=self._out)
         self.display.show(self._out)
         if self.store is not None:
