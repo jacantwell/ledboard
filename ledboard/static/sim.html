@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ledboard sim</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0b0b0d; color: #9a978f; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; display: grid; place-items: center; min-height: 100vh; }
+  main { display: grid; gap: 14px; padding: 24px; max-width: 100vw; }
+  .panel { background: #000; padding: 14px; border-radius: 6px; box-shadow: inset 0 0 0 1px #222; overflow-x: auto; }
+  canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
+  .bar { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
+  .bar span b { color: #e8e5de; font-weight: 500; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; background: #17181b; color: #e8e5de; border: 1px solid #2b2c31; border-radius: 4px; padding: 8px 10px; font: inherit; }
+  button { background: #ffb020; color: #1a1b1e; border: 0; border-radius: 4px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #ffb020; outline-offset: 2px; }
+  .ok { color: #7fd18b; } .bad { color: #ff6b7f; }
+</style>
+</head>
+<body>
+<main>
+  <div class="panel"><canvas id="c" width="1024" height="256" aria-label="LED board simulator"></canvas></div>
+  <div class="bar">
+    <span>board <b id="size">…</b></span>
+    <span>app <b id="app">…</b></span>
+    <span>frames <b id="frames">0</b></span>
+    <span id="conn" class="bad">connecting</span>
+  </div>
+  <form id="f">
+    <input id="t" maxlength="200" placeholder="Type something and hit enter to POST /text" autocomplete="off">
+    <button type="submit">Send</button>
+  </form>
+</main>
+<script>
+(function () {
+  var c = document.getElementById('c'), ctx = c.getContext('2d');
+  var W = 128, H = 32, S = 8, frames = 0;
+  var conn = document.getElementById('conn');
+
+  function draw(buf) {
+    var px = new Uint8Array(buf);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
+    var r = S * 0.36;
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var i = (y * W + x) * 3, R = px[i], G = px[i + 1], B = px[i + 2];
+      if (R + G + B < 6) { ctx.fillStyle = '#141311'; }
+      else { ctx.fillStyle = 'rgb(' + R + ',' + G + ',' + B + ')'; }
+      ctx.beginPath(); ctx.arc(x * S + S / 2, y * S + S / 2, r, 0, 6.2832); ctx.fill();
+    }
+    frames++; document.getElementById('frames').textContent = frames;
+  }
+
+  function connect() {
+    var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var ws = new WebSocket(proto + location.host + '/sim/ws');
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = function () { conn.textContent = 'live'; conn.className = 'ok'; };
+    ws.onmessage = function (e) {
+      if (typeof e.data === 'string') {
+        var m = JSON.parse(e.data); W = m.w; H = m.h;
+        c.width = W * S; c.height = H * S;
+        document.getElementById('size').textContent = W + '×' + H;
+        return;
+      }
+      draw(e.data);
+    };
+    ws.onclose = function () { conn.textContent = 'reconnecting'; conn.className = 'bad'; setTimeout(connect, 1000); };
+  }
+  connect();
+
+  function health() {
+    fetch('/healthz').then(function (r) { return r.json(); }).then(function (h) {
+      document.getElementById('app').textContent = h.active_app || 'none';
+    }).catch(function () {});
+  }
+  health(); setInterval(health, 2000);
+
+  document.getElementById('f').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var t = document.getElementById('t');
+    if (!t.value.trim()) return;
+    fetch('/text', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: t.value })
+      .then(function (r) { if (!r.ok) return r.text().then(function (m) { conn.textContent = r.status + ' ' + m; conn.className = 'bad'; }); t.value = ''; });
+  });
+})();
+</script>
+</body>
+</html>
