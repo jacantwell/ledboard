@@ -108,7 +108,7 @@ def test_post_text_falls_back_to_the_default_colour(client: TestClient, color):
     assert r.status_code == 202, f"{color!r} means 'use the board default'"
 
 
-@pytest.mark.parametrize("duration", [1, 30.5, 300])
+@pytest.mark.parametrize("duration", [1, 30.5, 60])
 def test_post_text_accepts_a_duration(client: TestClient, text_app: TextApp, duration):
     r = client.post("/text", json={"text": "hi", "duration_s": duration})
 
@@ -117,12 +117,12 @@ def test_post_text_accepts_a_duration(client: TestClient, text_app: TextApp, dur
     assert text_app.pending == 1, "the message reached the app"
 
 
-@pytest.mark.parametrize("duration", [300.01, 301, 100000])
+@pytest.mark.parametrize("duration", [60.01, 61, 100000])
 def test_post_text_rejects_a_duration_over_the_max(client: TestClient, text_app: TextApp, duration):
     r = client.post("/text", json={"text": "hi", "duration_s": duration})
 
-    assert r.status_code == 422, f"{duration}s is over the 300s cap"
-    assert "300" in r.json()["detail"], "the cap is named"
+    assert r.status_code == 422, f"{duration}s is over the 60s cap"
+    assert "60" in r.json()["detail"], "the cap is named"
     assert text_app.pending == 0, "nothing is queued"
 
 
