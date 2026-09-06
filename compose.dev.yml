@@ -1,0 +1,12 @@
+# Run the daemon in a container on a laptop with the web simulator. No hardware.
+#   docker compose -f compose.dev.yml up --build
+services:
+  ledboardd:
+    build: .
+    image: ledboard:dev
+    environment:
+      LEDBOARD_DISPLAY: web
+      LEDBOARD_APPS: text,clock
+      LEDBOARD_LOG_LEVEL: info
+    ports:
+      - "8080:8080"
