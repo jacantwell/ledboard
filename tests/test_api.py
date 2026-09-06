@@ -40,7 +40,12 @@ def test_post_text_queues_a_plain_body(client: TestClient, text_app: TextApp):
     r = client.post("/text", content="hello wall")
 
     assert r.status_code == 202, r.text
-    assert r.json() == {"queued": True, "position": 1, "text": "hello wall"}, "echoes what queued"
+    assert r.json() == {
+        "queued": True,
+        "position": 1,
+        "text": "hello wall",
+        "duration_s": None,
+    }, "echoes what queued"
     assert text_app.pending == 1, "the message reached the app"
 
 
@@ -101,6 +106,40 @@ def test_post_text_cleans_the_message(client: TestClient, raw, cleaned):
 def test_post_text_falls_back_to_the_default_colour(client: TestClient, color):
     r = client.post("/text", json={"text": "hi", "color": color})
     assert r.status_code == 202, f"{color!r} means 'use the board default'"
+
+
+@pytest.mark.parametrize("duration", [1, 30.5, 300])
+def test_post_text_accepts_a_duration(client: TestClient, text_app: TextApp, duration):
+    r = client.post("/text", json={"text": "hi", "duration_s": duration})
+
+    assert r.status_code == 202, r.text
+    assert r.json()["duration_s"] == duration, "the duration is echoed back"
+    assert text_app.pending == 1, "the message reached the app"
+
+
+@pytest.mark.parametrize("duration", [300.01, 301, 100000])
+def test_post_text_rejects_a_duration_over_the_max(client: TestClient, text_app: TextApp, duration):
+    r = client.post("/text", json={"text": "hi", "duration_s": duration})
+
+    assert r.status_code == 422, f"{duration}s is over the 300s cap"
+    assert "300" in r.json()["detail"], "the cap is named"
+    assert text_app.pending == 0, "nothing is queued"
+
+
+@pytest.mark.parametrize("duration", [0, -5, "ten", "10s"])
+def test_post_text_rejects_a_bad_duration(client: TestClient, text_app: TextApp, duration):
+    r = client.post("/text", json={"text": "hi", "duration_s": duration})
+
+    assert r.status_code == 422, f"{duration!r} is not a valid duration"
+    assert text_app.pending == 0, "nothing is queued"
+
+
+def test_post_text_max_duration_comes_from_settings(store: FrameStore, text_app: TextApp):
+    settings = Settings(_env_file=None, text_max_duration_s=10)
+    client = TestClient(create_api(settings, store, text_app))
+
+    assert client.post("/text", json={"text": "hi", "duration_s": 10}).status_code == 202
+    assert client.post("/text", json={"text": "hi", "duration_s": 11}).status_code == 422
 
 
 def test_post_text_reports_the_queue_position(client: TestClient):

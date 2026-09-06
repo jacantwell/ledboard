@@ -175,3 +175,70 @@ def test_invalid_colour_is_rejected_at_submit_time(app: TextApp):
 def test_app_identity_matches_the_protocol(app: TextApp):
     assert app.name == "text", "the scheduler looks the app up by name"
     assert app.priority == 50, "text outranks the clock"
+
+
+# -- duration ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("duration", [0.5, 3.0, 10.0])
+def test_short_text_with_a_duration_ignores_the_dwell(board: Canvas, duration):
+    app = make_app(dwell_s=2.0)
+    app.submit("hi", duration_s=duration)
+
+    app.render(board, T0)
+    app.render(board, T0 + duration - 0.01)
+    assert app.pending == 1, "the message is still up just before its duration ends"
+
+    app.render(board, T0 + duration)
+    assert app.pending == 0, "and dropped once the chosen duration elapses"
+
+
+@pytest.mark.parametrize("duration", [3.0, 30.0])
+def test_long_text_with_a_duration_keeps_scrolling_until_it_elapses(board: Canvas, duration):
+    app = make_app()
+    text = long_text()
+    one_pass = (WIDTH + text_width(text)) / PPS
+    app.submit(text, duration_s=duration)
+    app.render(board, T0)
+
+    app.render(board, T0 + duration - 0.01)
+    assert app.pending == 1, (
+        f"still showing at {duration - 0.01:.2f}s (one pass is {one_pass:.2f}s)"
+    )
+
+    app.render(board, T0 + duration)
+    assert app.pending == 0, "dropped once the duration elapses, mid-scroll or not"
+
+
+@pytest.mark.parametrize("passes", [1, 2, 3])
+def test_long_text_loops_back_in_from_the_right(board: Canvas, passes):
+    app = make_app()
+    text = long_text()
+    period = (WIDTH + text_width(text)) / PPS
+    app.submit(text, RED, duration_s=period * 10)
+    app.render(board, T0)
+
+    elapsed = passes * period + 0.5
+    board.clear()
+    app.render(board, T0 + elapsed)
+    expected_x = round(WIDTH - 0.5 * PPS)
+    assert lit_bbox(board.fb)[0] == expected_x, f"pass {passes + 1} re-enters at x={expected_x}"
+
+
+def test_long_text_wraps_rather_than_going_blank(board: Canvas):
+    app = make_app()
+    text = long_text()
+    period = (WIDTH + text_width(text)) / PPS
+    app.submit(text, RED, duration_s=period * 5)
+    app.render(board, T0)
+
+    for elapsed in (period * 0.25, period * 1.25, period * 2.25, period * 3.9):
+        board.clear()
+        app.render(board, T0 + elapsed)
+        assert lit(board.fb).any(), f"pixels lit at {elapsed:.2f}s while looping"
+
+
+@pytest.mark.parametrize("duration", [0, -1.0])
+def test_non_positive_duration_is_rejected_at_submit_time(app: TextApp, duration):
+    with pytest.raises(ValueError):
+        app.submit("hi", duration_s=duration)

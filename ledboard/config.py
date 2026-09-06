@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     brightness: float = 1.0
 
     text_max_len: int = 200
-    text_dwell_s: float = 4.0
+    text_dwell_s: float = 4.0  # default hold for short text when no duration is given
+    text_max_duration_s: float = 300.0
     text_scroll_pps: float = 40.0
     text_color: str = "#FF8C00"
 

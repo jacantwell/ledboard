@@ -1,4 +1,4 @@
-"""Show queued text messages. Short ones sit centred; long ones scroll through once."""
+"""Show queued text messages. Short ones sit centred; long ones scroll, looping for the duration."""
 
 import threading
 from collections import deque
@@ -13,6 +13,7 @@ class Message:
     text: str
     color: Color
     font: str = fonts.DEFAULT
+    duration_s: float | None = None  # None: dwell for short text, one pass for scrolling text
 
 
 class TextApp:
@@ -41,9 +42,18 @@ class TextApp:
 
     # -- input ---------------------------------------------------------------
 
-    def submit(self, text: str, color: str | Color | None = None) -> int:
+    def submit(
+        self, text: str, color: str | Color | None = None, duration_s: float | None = None
+    ) -> int:
         """Queue a message. Returns its position (1 = showing next)."""
-        msg = Message(text=text, color=parse_color(color, self.default_color), font=self.font)
+        if duration_s is not None and duration_s <= 0:
+            raise ValueError("duration_s must be positive")
+        msg = Message(
+            text=text,
+            color=parse_color(color, self.default_color),
+            font=self.font,
+            duration_s=duration_s,
+        )
         with self._lock:
             self._queue.append(msg)
             return len(self._queue)
@@ -102,7 +112,12 @@ class TextApp:
         y = (self.height - fh) // 2
         if w <= self.width:
             canvas.text((self.width - w) // 2, y, msg.text, msg.color, msg.font)
-            return elapsed >= self.dwell_s
-        x = int(round(self.width - elapsed * self.scroll_pps))
+            hold = self.dwell_s if msg.duration_s is None else msg.duration_s
+            return elapsed >= hold
+        # one pass: enter from the right edge, leave fully off the left, then wrap
+        period = (self.width + w) / self.scroll_pps
+        if elapsed >= (period if msg.duration_s is None else msg.duration_s):
+            return True
+        x = int(round(self.width - (elapsed % period) * self.scroll_pps))
         canvas.text(x, y, msg.text, msg.color, msg.font)
-        return x + w < 0
+        return False

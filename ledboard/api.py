@@ -28,6 +28,7 @@ SIM_HTML = (Path(__file__).parent / "static" / "sim.html").read_text()
 class TextIn(BaseModel):
     text: str = Field(min_length=1)
     color: str | None = None
+    duration_s: float | None = Field(default=None, gt=0)  # None: the board's default
 
 
 class RateLimiter:
@@ -112,17 +113,19 @@ def create_api(
                 payload = TextIn.model_validate(json.loads(body))
             except (ValueError, TypeError) as e:
                 raise HTTPException(422, f"bad json body: {e}") from e
-            raw, color = payload.text, payload.color
+            raw, color, duration = payload.text, payload.color, payload.duration_s
         else:
-            raw, color = body.decode("utf-8", errors="replace"), None
+            raw, color, duration = body.decode("utf-8", errors="replace"), None, None
 
         text = clean_text(raw, settings.text_max_len)
         try:
             parsed = parse_color(color) if color else None
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
-        position = text_app.submit(text, parsed)
-        return {"queued": True, "position": position, "text": text}
+        if duration is not None and duration > settings.text_max_duration_s:
+            raise HTTPException(422, f"duration_s longer than {settings.text_max_duration_s:g}s")
+        position = text_app.submit(text, parsed, duration)
+        return {"queued": True, "position": position, "text": text, "duration_s": duration}
 
     @app.delete("/text")
     def clear_text(claims: dict = user) -> dict:
@@ -136,6 +139,7 @@ def create_api(
         return (
             f"ledboard {__version__}\n"
             f'POST /text  with a plain-text body or {{"text": "...", "color": "#hex"}}\n'
+            f'            "duration_s": seconds to show it, max {settings.text_max_duration_s:g}\n'
             f"            Authorization: Bearer <clerk jwt> when LEDBOARD_AUTH_ISSUER is set\n"
             f"GET  /sim   to watch the board in a browser\n"
             f"GET  /healthz\n"
