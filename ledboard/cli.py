@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -83,11 +84,12 @@ def cmd_send(args: argparse.Namespace) -> int:
     """POST text to a running daemon."""
     text = " ".join(args.text) if args.text else sys.stdin.read().strip()
     body = json.dumps({"text": text, "color": args.color}).encode()
+    headers = {"content-type": "application/json"}
+    token = args.token or os.environ.get("LEDBOARD_TOKEN")
+    if token:
+        headers["authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
-        args.url.rstrip("/") + "/text",
-        data=body,
-        headers={"content-type": "application/json"},
-        method="POST",
+        args.url.rstrip("/") + "/text", data=body, headers=headers, method="POST"
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as r:
@@ -132,6 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("text", nargs="*")
     s.add_argument("--url", default="http://jasperpi.local:8080")
     s.add_argument("--color")
+    s.add_argument("--token", help="bearer token for a daemon with auth on (or LEDBOARD_TOKEN)")
     s.set_defaults(fn=cmd_send)
     return p
 
