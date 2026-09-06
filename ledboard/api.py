@@ -55,6 +55,8 @@ class RateLimiter:
 def clean_text(raw: str, max_len: int) -> str:
     s = _CONTROL.sub("", raw).replace("\r", " ").replace("\n", " ").strip()
     s = re.sub(r"\s+", " ", s)
+    # the bitmap fonts only cover latin-1; anything else becomes "?"
+    s = s.encode("latin-1", errors="replace").decode("latin-1")
     if not s:
         raise HTTPException(400, "text is empty after cleaning")
     if len(s) > max_len:
