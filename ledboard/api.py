@@ -2,22 +2,25 @@
 
 import asyncio
 import json
+import logging
 import re
 import threading
 import time
 from collections import defaultdict, deque
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ledboard import __version__
 from ledboard.apps.text import TextApp
+from ledboard.auth import ClerkVerifier, require_user
 from ledboard.canvas import parse_color
 from ledboard.config import Settings
 from ledboard.display.base import FrameStore
 
+log = logging.getLogger("ledboard.api")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 SIM_HTML = (Path(__file__).parent / "static" / "sim.html").read_text()
 
@@ -66,9 +69,19 @@ def client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def create_api(settings: Settings, store: FrameStore, text_app: TextApp | None) -> FastAPI:
+def create_api(
+    settings: Settings,
+    store: FrameStore,
+    text_app: TextApp | None,
+    verifier: ClerkVerifier | None = None,
+) -> FastAPI:
     app = FastAPI(title="ledboard", version=__version__)
     limiter = RateLimiter(settings.rate_limit_per_min)
+    if verifier is None and settings.auth_issuer:
+        verifier = ClerkVerifier(settings.auth_issuer, settings.auth_authorized_party_list)
+    if verifier is None:
+        log.warning("LEDBOARD_AUTH_ISSUER is empty: POST /text accepts anyone")
+    user = Depends(require_user(verifier))
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -84,10 +97,10 @@ def create_api(settings: Settings, store: FrameStore, text_app: TextApp | None) 
         }
 
     @app.post("/text", status_code=202)
-    async def post_text(request: Request) -> dict:
+    async def post_text(request: Request, claims: dict = user) -> dict:
         if text_app is None:
             raise HTTPException(503, "text app is not enabled on this board")
-        if not limiter.allow(client_key(request)):
+        if not limiter.allow(claims.get("sub") or client_key(request)):
             raise HTTPException(429, "slow down: too many messages this minute")
 
         body = await request.body()
@@ -110,7 +123,7 @@ def create_api(settings: Settings, store: FrameStore, text_app: TextApp | None) 
         return {"queued": True, "position": position, "text": text}
 
     @app.delete("/text")
-    def clear_text() -> dict:
+    def clear_text(claims: dict = user) -> dict:
         if text_app is None:
             raise HTTPException(503, "text app is not enabled on this board")
         text_app.clear()
@@ -121,6 +134,7 @@ def create_api(settings: Settings, store: FrameStore, text_app: TextApp | None) 
         return (
             f"ledboard {__version__}\n"
             f'POST /text  with a plain-text body or {{"text": "...", "color": "#hex"}}\n'
+            f"            Authorization: Bearer <clerk jwt> when LEDBOARD_AUTH_ISSUER is set\n"
             f"GET  /sim   to watch the board in a browser\n"
             f"GET  /healthz\n"
         )

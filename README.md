@@ -3,7 +3,7 @@
 Display daemon for the LED matrix on `jasperpi` (Raspberry Pi 5, Adafruit RGB Matrix Bonnet,
 two 64x32 HUB75 panels chained to 128x32). One process owns the panel; **apps** give it frames.
 
-- `POST /text` puts a string on the wall.
+- `POST /text` puts a string on the wall (bearer Clerk JWT when `LEDBOARD_AUTH_ISSUER` is set).
 - `GET /sim` shows the board live in a browser, so you can develop without hardware.
 - `ledboard text "hello"` is the same thing from a shell, no daemon needed.
 
@@ -60,13 +60,29 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_PORT` | `8080` | HTTP port |
 | `LEDBOARD_BRIGHTNESS` | `1.0` | 0..1, gamma-aware |
 | `LEDBOARD_TEXT_MAX_LEN` | `200` | reject longer POSTs |
-| `LEDBOARD_RATE_LIMIT_PER_MIN` | `10` | per client IP |
+| `LEDBOARD_RATE_LIMIT_PER_MIN` | `10` | per user (`sub`), or per client IP when open |
+| `LEDBOARD_AUTH_ISSUER` | *(empty, open)* | Clerk frontend API url, e.g. `https://xxx.clerk.accounts.dev` |
+| `LEDBOARD_AUTH_AUTHORIZED_PARTIES` | *(empty, any)* | comma list of origins allowed in `azp` |
 | `LEDBOARD_BUS_STOP_ID` | `59378` | the code on the pole, or a naptan id |
 | `LEDBOARD_BUS_ROUTES` | *(all)* | comma list, e.g. `12,36,171` |
 | `LEDBOARD_BUS_WINDOWS` | *(always)* | e.g. `07:00-10:00,17:00-20:00`, local time |
 | `LEDBOARD_BUS_REFRESH_S` | `30` | the API caches for 30s |
 | `LEDBOARD_BUS_STALE_S` | `120` | after this the board yields to the clock |
 | `LEDBOARD_BUS_API_KEY` | *(none)* | optional, raises the TfL rate limit |
+
+## Auth
+
+`POST /text` and `DELETE /text` take a Clerk session JWT as `Authorization: Bearer <token>`.
+The daemon fetches the issuer's JWKS once (cached), checks the RS256 signature, `exp`/`iat`,
+that `iss` matches `LEDBOARD_AUTH_ISSUER`, and that `azp` (the origin that minted the token) is
+in `LEDBOARD_AUTH_AUTHORIZED_PARTIES` when that list is non-empty. Anything else is a 401.
+
+An empty `LEDBOARD_AUTH_ISSUER` leaves both endpoints open, which is what `make dev` wants; the
+daemon logs a warning at startup so you notice on the Pi. `/healthz`, `/`, `/sim` are always open.
+
+```sh
+uv run ledboard send "hi" --token "$(pbpaste)"   # or export LEDBOARD_TOKEN=...
+```
 
 ## Bus board
 

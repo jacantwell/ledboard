@@ -37,6 +37,10 @@ class Settings(BaseSettings):
 
     rate_limit_per_min: int = 10
 
+    # Clerk frontend API url, e.g. https://xxx.clerk.accounts.dev. Empty leaves POST /text open.
+    auth_issuer: str = ""
+    auth_authorized_parties: str = ""  # comma list of origins allowed in azp; empty = don't check
+
     png_path: str = "out/frame.png"
     png_scale: int = 8
 
@@ -49,3 +53,7 @@ class Settings(BaseSettings):
     @property
     def bus_route_names(self) -> list[str]:
         return [r.strip() for r in self.bus_routes.split(",") if r.strip()]
+
+    @property
+    def auth_authorized_party_list(self) -> list[str]:
+        return [p.strip() for p in self.auth_authorized_parties.split(",") if p.strip()]

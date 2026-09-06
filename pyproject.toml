@@ -13,6 +13,7 @@ dependencies = [
   "websockets>=14",
   "pydantic>=2.10",
   "pydantic-settings>=2.7",
+  "pyjwt[crypto]>=2.10",
 ]
 
 [project.optional-dependencies]

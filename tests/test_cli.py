@@ -116,6 +116,31 @@ def test_send_posts_json_to_the_daemon(monkeypatch: pytest.MonkeyPatch, capsys):
     assert "queued" in capsys.readouterr().out, "the response is printed"
 
 
+@pytest.mark.parametrize(
+    "argv,env,expected",
+    [
+        ([], {}, None),
+        (["--token", "abc"], {}, "Bearer abc"),
+        ([], {"LEDBOARD_TOKEN": "fromenv"}, "Bearer fromenv"),
+        (["--token", "flag"], {"LEDBOARD_TOKEN": "fromenv"}, "Bearer flag"),
+    ],
+    ids=["no token", "flag", "env", "flag beats env"],
+)
+def test_send_attaches_a_bearer_token(monkeypatch: pytest.MonkeyPatch, argv, env, expected):
+    sent = {}
+
+    def fake_urlopen(req, timeout=None):
+        sent["auth"] = req.get_header("Authorization")
+        return FakeResponse(b"{}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+
+    assert main(["send", "hi", "--url", "http://box:8080", *argv]) == 0, "the post succeeds"
+    assert sent["auth"] == expected, "the header matches the token source"
+
+
 def test_send_reports_an_http_error(monkeypatch: pytest.MonkeyPatch, capsys):
     def fake_urlopen(req, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 429, "Too Many", {}, io.BytesIO(b"slow down"))
