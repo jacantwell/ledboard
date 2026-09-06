@@ -6,7 +6,7 @@ services:
     image: ledboard:dev
     environment:
       LEDBOARD_DISPLAY: web
-      LEDBOARD_APPS: text,clock
+      LEDBOARD_APPS: text,bus,clock
       LEDBOARD_LOG_LEVEL: info
     ports:
       - "8080:8080"

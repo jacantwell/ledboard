@@ -24,6 +24,17 @@ class Settings(BaseSettings):
     text_scroll_pps: float = 40.0
     text_color: str = "#FF8C00"
 
+    # St Giles Church (stop U), the code printed on the pole. A naptan id works too.
+    bus_stop_id: str = "59378"
+    bus_routes: str = ""  # empty shows every route at the stop
+    bus_windows: str = ""  # empty is always on, e.g. "07:00-10:00,17:00-20:00"
+    bus_refresh_s: float = 30.0  # the api caches for 30s, no point going faster
+    bus_stale_s: float = 120.0
+    bus_color: str = "#FF8C00"
+    bus_font: str = "5x7"
+    bus_api_key: str = ""
+    bus_api_url: str = "https://api.tfl.gov.uk"
+
     rate_limit_per_min: int = 10
 
     png_path: str = "out/frame.png"
@@ -34,3 +45,7 @@ class Settings(BaseSettings):
     @property
     def app_names(self) -> list[str]:
         return [a.strip() for a in self.apps.split(",") if a.strip()]
+
+    @property
+    def bus_route_names(self) -> list[str]:
+        return [r.strip() for r in self.bus_routes.split(",") if r.strip()]

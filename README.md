@@ -34,7 +34,9 @@ ledboard/
   daemon.py      wires everything, runs the scheduler thread + HTTP server
   scheduler.py   picks the highest-priority app that wants the screen, applies brightness, shows
   app.py         the App protocol every app implements
-  apps/          text (POST /text queue), clock (idle), testpattern
+  apps/          text (POST /text queue), bus (departure board), clock (idle), testpattern
+  schedule.py    time-of-day windows an app can gate itself on
+  tfl.py         live bus arrivals for one stop, off the render thread
   canvas.py      numpy framebuffer + Pillow bitmap-font text helpers
   fonts/         X11 misc-fixed BDF fonts, public domain, compiled on first use
   display/       hw (Piomatter on /dev/pio0), png, array; FrameStore feeds the web sim
@@ -59,13 +61,38 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_BRIGHTNESS` | `1.0` | 0..1, gamma-aware |
 | `LEDBOARD_TEXT_MAX_LEN` | `200` | reject longer POSTs |
 | `LEDBOARD_RATE_LIMIT_PER_MIN` | `10` | per client IP |
+| `LEDBOARD_BUS_STOP_ID` | `59378` | the code on the pole, or a naptan id |
+| `LEDBOARD_BUS_ROUTES` | *(all)* | comma list, e.g. `12,36,171` |
+| `LEDBOARD_BUS_WINDOWS` | *(always)* | e.g. `07:00-10:00,17:00-20:00`, local time |
+| `LEDBOARD_BUS_REFRESH_S` | `30` | the API caches for 30s |
+| `LEDBOARD_BUS_STALE_S` | `120` | after this the board yields to the clock |
+| `LEDBOARD_BUS_API_KEY` | *(none)* | optional, raises the TfL rate limit |
+
+## Bus board
+
+Live TfL countdown for one stop, four rows of route / destination / minutes. It is the background
+app: whenever it has nothing honest to show it yields and the clock comes back.
+
+```
+12   Oxford Circus          5
+36   Queen's Park           7
+436  Battersea Park Stat    7
+171  Elephant & Castle      8
+```
+
+`LEDBOARD_BUS_STOP_ID` takes either a naptan id or the five-digit code printed on the bus stop
+(resolved once at startup). The default, `59378`, is St Giles Church. No API key is needed — TfL
+allows 50 requests a minute unauthenticated and the app polls twice a minute.
+
+`LEDBOARD_BUS_WINDOWS` restricts it to times of day, e.g. `07:00-10:00,17:00-20:00`. Empty means
+always on. Outside a window the poll thread doesn't even ask, so nothing hits the API at 3am.
 
 ## Writing an app
 
 ```python
 class MyApp:
     name = "my"
-    priority = 20  # text is 50, clock is 0
+    priority = 20  # text is 50, bus is 20, clock is 0
 
     def start(self): ...
     def stop(self): ...
