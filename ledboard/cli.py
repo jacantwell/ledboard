@@ -83,7 +83,7 @@ def cmd_testpattern(args: argparse.Namespace) -> int:
 def cmd_send(args: argparse.Namespace) -> int:
     """POST text to a running daemon."""
     text = " ".join(args.text) if args.text else sys.stdin.read().strip()
-    body = json.dumps({"text": text, "color": args.color}).encode()
+    body = json.dumps({"text": text, "color": args.color, "duration_s": args.duration}).encode()
     headers = {"content-type": "application/json"}
     token = args.token or os.environ.get("LEDBOARD_TOKEN")
     if token:
@@ -134,6 +134,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("text", nargs="*")
     s.add_argument("--url", default="http://jasperpi.local:8080")
     s.add_argument("--color")
+    s.add_argument(
+        "--duration", type=float, help="seconds to show it for (board default if omitted)"
+    )
     s.add_argument("--token", help="bearer token for a daemon with auth on (or LEDBOARD_TOKEN)")
     s.set_defaults(fn=cmd_send)
     return p

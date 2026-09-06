@@ -112,7 +112,11 @@ def test_send_posts_json_to_the_daemon(monkeypatch: pytest.MonkeyPatch, capsys):
     assert code == 0, "a successful post returns zero"
     assert sent["url"] == "http://box:8080/text", "the trailing slash is handled"
     assert sent["method"] == "POST", "it posts"
-    assert sent["body"] == {"text": "hello there", "color": "#fff"}, "the payload is json"
+    assert sent["body"] == {
+        "text": "hello there",
+        "color": "#fff",
+        "duration_s": None,
+    }, "the payload is json"
     assert "queued" in capsys.readouterr().out, "the response is printed"
 
 
@@ -139,6 +143,19 @@ def test_send_attaches_a_bearer_token(monkeypatch: pytest.MonkeyPatch, argv, env
 
     assert main(["send", "hi", "--url", "http://box:8080", *argv]) == 0, "the post succeeds"
     assert sent["auth"] == expected, "the header matches the token source"
+
+
+@pytest.mark.parametrize("argv,expected", [([], None), (["--duration", "30"], 30.0)])
+def test_send_passes_the_duration_through(monkeypatch: pytest.MonkeyPatch, argv, expected):
+    sent = {}
+
+    def fake_urlopen(req, timeout=None):
+        sent["body"] = json.loads(req.data)
+        return FakeResponse(b"{}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert main(["send", "hi", "--url", "http://box:8080", *argv]) == 0, "the post succeeds"
+    assert sent["body"]["duration_s"] == expected, "duration_s mirrors --duration"
 
 
 def test_send_reports_an_http_error(monkeypatch: pytest.MonkeyPatch, capsys):
