@@ -9,6 +9,7 @@ import uvicorn
 
 from ledboard.api import create_api
 from ledboard.apps import build_apps
+from ledboard.apps.etch import EtchApp
 from ledboard.apps.text import TextApp
 from ledboard.config import Settings
 from ledboard.display import FrameStore, make_display
@@ -36,6 +37,8 @@ def run(settings: Settings | None = None) -> None:
     apps = build_apps(settings)
     text_app = apps.get("text")
     assert text_app is None or isinstance(text_app, TextApp)
+    etch_app = apps.get("etch")
+    assert etch_app is None or isinstance(etch_app, EtchApp)
 
     scheduler = Scheduler(
         display, apps.values(), store, fps=settings.fps, brightness=settings.brightness
@@ -44,7 +47,7 @@ def run(settings: Settings | None = None) -> None:
     worker = threading.Thread(target=scheduler.run, args=(stop,), name="scheduler", daemon=True)
     worker.start()
 
-    api = create_api(settings, store, text_app)
+    api = create_api(settings, store, text_app, etch_app=etch_app)
     server = uvicorn.Server(
         uvicorn.Config(
             api,

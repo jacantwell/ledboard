@@ -7,7 +7,7 @@
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #0b0b0d; color: #9a978f; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; display: grid; place-items: center; min-height: 100vh; }
-  main { display: grid; gap: 14px; padding: 24px; max-width: 100vw; }
+  main { display: grid; gap: 14px; padding: 24px; max-width: 100vw; width: 1080px; max-width: 100vw; }
   .panel { background: #000; padding: 14px; border-radius: 6px; box-shadow: inset 0 0 0 1px #222; overflow-x: auto; }
   canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
   .bar { display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between; }
@@ -17,38 +17,133 @@
   button { background: #ffb020; color: #1a1b1e; border: 0; border-radius: 4px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
   button:focus-visible, input:focus-visible { outline: 2px solid #ffb020; outline-offset: 2px; }
   .ok { color: #7fd18b; } .bad { color: #ff6b7f; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #2b2c31; }
+  .tab { background: none; color: #9a978f; border: 0; border-radius: 0; padding: 8px 14px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: #e8e5de; }
+  .tab.active { color: #ffb020; border-bottom-color: #ffb020; }
+  .tab:focus-visible { outline: 2px solid #ffb020; outline-offset: 2px; }
+  .etch-frame { background: #101114; border: 1px solid #2b2c31; border-radius: 12px; padding: 18px 18px 14px; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  .etch-frame.shaking { animation: etchshake 0.55s linear; }
+  @keyframes etchshake {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    15% { transform: translate(-14px, 2px) rotate(-1.2deg); }
+    30% { transform: translate(12px, -2px) rotate(1.2deg); }
+    45% { transform: translate(-10px, 1px) rotate(-1deg); }
+    60% { transform: translate(9px, -1px) rotate(1deg); }
+    75% { transform: translate(-6px, 1px) rotate(-0.6deg); }
+    90% { transform: translate(4px, 0) rotate(0.4deg); }
+  }
+  .etch-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .etch-title { color: #e8e5de; letter-spacing: 0.28em; font-weight: 600; font-size: 12px; }
+  .etch-sub { color: #9a978f; font-size: 12px; }
+  .etch-sub b { color: #ffb020; font-weight: 500; }
+  .etch-screen { background: #000; border-radius: 6px; box-shadow: inset 0 0 0 1px #222; overflow-x: auto; padding: 14px; }
+  .etch-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .knob-wrap { display: grid; gap: 6px; justify-items: center; width: 130px; }
+  .knob { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #34353c, #17181b 70%); border: 1px solid #3a3b41; box-shadow: 0 2px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08); cursor: ns-resize; touch-action: none; display: grid; place-items: center; }
+  .knob:hover { border-color: #ffb020; }
+  .knob:active { cursor: grabbing; }
+  .knob .dial { width: 56px; height: 56px; border-radius: 50%; position: relative; pointer-events: none; }
+  .knob .dial::before { content: ""; position: absolute; left: 50%; top: 3px; width: 3px; height: 16px; margin-left: -1.5px; background: #ffb020; border-radius: 2px; }
+  .knob-label { color: #e8e5de; font-size: 12px; }
+  .knob-hint { color: #9a978f; font-size: 11px; text-align: center; }
+  .etch-mid { display: grid; gap: 8px; justify-items: center; text-align: center; }
+  .etch-pos { color: #e8e5de; font-size: 12px; }
+  .etch-msg { min-height: 1.5em; font-size: 12px; }
+  .btn-ghost { background: #17181b; color: #e8e5de; border: 1px solid #2b2c31; }
+  .btn-ghost:hover { border-color: #ffb020; color: #ffb020; }
 </style>
 </head>
 <body>
 <main>
-  <div class="panel"><canvas id="c" width="1024" height="256" aria-label="LED board simulator"></canvas></div>
-  <div class="bar">
-    <span>board <b id="size">…</b></span>
-    <span>app <b id="app">…</b></span>
-    <span>frames <b id="frames">0</b></span>
-    <span id="conn" class="bad">connecting</span>
-  </div>
-  <form id="f">
-    <input id="t" maxlength="200" placeholder="Type something and hit enter to POST /text" autocomplete="off">
-    <button type="submit">Send</button>
-  </form>
+  <nav class="tabs" role="tablist" aria-label="simulator views">
+    <button id="tabbtn-board" class="tab active" role="tab" aria-selected="true" aria-controls="tab-board">board</button>
+    <button id="tabbtn-etch" class="tab" role="tab" aria-selected="false" aria-controls="tab-etch">etch-a-sketch</button>
+  </nav>
+
+  <section id="tab-board" role="tabpanel" aria-labelledby="tabbtn-board">
+    <div style="display:grid; gap:14px;">
+      <div class="panel"><canvas id="c" width="1024" height="256" aria-label="LED board simulator"></canvas></div>
+      <div class="bar">
+        <span>board <b id="size">…</b></span>
+        <span>app <b id="app">…</b></span>
+        <span>frames <b id="frames">0</b></span>
+        <span id="conn" class="bad">connecting</span>
+      </div>
+      <form id="f">
+        <input id="t" maxlength="200" placeholder="Type something and hit enter to POST /text" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="tab-etch" role="tabpanel" aria-labelledby="tabbtn-etch" hidden>
+    <div class="etch-frame" id="etch-frame">
+      <div class="etch-head">
+        <span class="etch-title">ETCH-A-SKETCH</span>
+        <span class="etch-sub">background layer &bull; <b>bus + text overwrite it</b> &bull; knobs only &mdash; no keys</span>
+      </div>
+      <div class="etch-screen"><canvas id="etch" width="1024" height="256" aria-label="Etch-a-sketch screen. Draw by dragging the knobs with the mouse."></canvas></div>
+      <div class="etch-controls">
+        <div class="knob-wrap">
+          <div class="knob" id="knob-x" aria-label="Left knob: horizontal. Drag up or down with the mouse to draw left and right."><div class="dial" id="dial-x"></div></div>
+          <span class="knob-label">&#9674; left &#8596;</span>
+          <span class="knob-hint">drag &#8597; to turn</span>
+        </div>
+        <div class="etch-mid">
+          <span class="etch-pos">x <b id="etch-x">…</b> &middot; y <b id="etch-y">…</b></span>
+          <span class="etch-sub">board <b id="etch-app">…</b></span>
+          <button type="button" class="btn-ghost" id="etch-shake">shake to clear</button>
+          <span class="etch-msg" id="etch-msg">grab the frame and shake it, or hit the button</span>
+        </div>
+        <div class="knob-wrap">
+          <div class="knob" id="knob-y" aria-label="Right knob: vertical. Drag up or down with the mouse to draw up and down."><div class="dial" id="dial-y"></div></div>
+          <span class="knob-label">right &#8597; &#9675;</span>
+          <span class="knob-hint">drag &#8597; to turn</span>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 <script>
 (function () {
+  // -- tabs ---------------------------------------------------------------
+  var btnBoard = document.getElementById('tabbtn-board');
+  var btnEtch = document.getElementById('tabbtn-etch');
+  var tabBoard = document.getElementById('tab-board');
+  var tabEtch = document.getElementById('tab-etch');
+  function show(which) {
+    var etch = which === 'etch';
+    btnBoard.classList.toggle('active', !etch);
+    btnEtch.classList.toggle('active', etch);
+    btnBoard.setAttribute('aria-selected', String(!etch));
+    btnEtch.setAttribute('aria-selected', String(etch));
+    tabBoard.hidden = etch;
+    tabEtch.hidden = !etch;
+    if (etch) etchSync();
+    try { location.hash = etch ? 'etch' : 'board'; } catch (e) {}
+  }
+  btnBoard.addEventListener('click', function () { show('board'); });
+  btnEtch.addEventListener('click', function () { show('etch'); });
+  if (location.hash === '#etch') show('etch');
+
+  // -- board tab (unchanged behaviour) ------------------------------------
   var c = document.getElementById('c'), ctx = c.getContext('2d');
   var W = 128, H = 32, S = 8, frames = 0;
   var conn = document.getElementById('conn');
 
-  function draw(buf) {
-    var px = new Uint8Array(buf);
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
-    var r = S * 0.36;
-    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
-      var i = (y * W + x) * 3, R = px[i], G = px[i + 1], B = px[i + 2];
-      if (R + G + B < 6) { ctx.fillStyle = '#141311'; }
-      else { ctx.fillStyle = 'rgb(' + R + ',' + G + ',' + B + ')'; }
-      ctx.beginPath(); ctx.arc(x * S + S / 2, y * S + S / 2, r, 0, 6.2832); ctx.fill();
+  function drawDots(target, buf, w, h, s, on) {
+    var px = new Uint8Array(buf), r = s * 0.36;
+    target.fillStyle = '#000'; target.fillRect(0, 0, w * s, h * s);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var i = (y * w + x) * 3, R = px[i], G = px[i + 1], B = px[i + 2];
+      target.fillStyle = (R + G + B < 6) ? '#141311' : on || ('rgb(' + R + ',' + G + ',' + B + ')');
+      target.beginPath(); target.arc(x * s + s / 2, y * s + s / 2, r, 0, 6.2832); target.fill();
     }
+  }
+
+  function draw(buf) {
+    drawDots(ctx, buf, W, H, S);
     frames++; document.getElementById('frames').textContent = frames;
   }
 
@@ -73,6 +168,7 @@
   function health() {
     fetch('/healthz').then(function (r) { return r.json(); }).then(function (h) {
       document.getElementById('app').textContent = h.active_app || 'none';
+      document.getElementById('etch-app').textContent = h.active_app || 'none';
     }).catch(function () {});
   }
   health(); setInterval(health, 2000);
@@ -84,6 +180,174 @@
     fetch('/text', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: t.value })
       .then(function (r) { if (!r.ok) return r.text().then(function (m) { conn.textContent = r.status + ' ' + m; conn.className = 'bad'; }); t.value = ''; });
   });
+
+  // -- etch tab -----------------------------------------------------------
+  // Knobs are the ONLY input that draws. No keyboard handlers on purpose:
+  // a real etch-a-sketch has two knobs and nothing else.
+  var ec = document.getElementById('etch'), ectx = ec.getContext('2d');
+  var EW = 128, EH = 32, ES = 8;
+  var ex = 0, ey = 0, bits = new Uint8Array(EW * EH);
+  var msg = document.getElementById('etch-msg');
+  var msgTimer = null;
+  function say(t, ok) {
+    msg.textContent = t;
+    msg.className = 'etch-msg ' + (ok === true ? 'ok' : ok === false ? 'bad' : '');
+    if (msgTimer) clearTimeout(msgTimer);
+    msgTimer = setTimeout(function () {
+      msg.textContent = 'grab the frame and shake it, or hit the button';
+      msg.className = 'etch-msg';
+    }, 2600);
+  }
+
+  function etchRender() {
+    var r = ES * 0.36;
+    ectx.fillStyle = '#000'; ectx.fillRect(0, 0, EW * ES, EH * ES);
+    for (var y = 0; y < EH; y++) for (var x = 0; x < EW; x++) {
+      ectx.fillStyle = bits[y * EW + x] ? '#f2f2f2' : '#141311';
+      ectx.beginPath(); ectx.arc(x * ES + ES / 2, y * ES + ES / 2, r, 0, 6.2832); ectx.fill();
+    }
+    document.getElementById('etch-x').textContent = String(ex).padStart(3, '0');
+    document.getElementById('etch-y').textContent = String(ey).padStart(3, '0');
+  }
+
+  function etchLine(x0, y0, x1, y1) {
+    var steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (var i = 0; i <= steps; i++) {
+      var x = Math.round(x0 + (x1 - x0) * (steps ? i / steps : 0));
+      var y = Math.round(y0 + (y1 - y0) * (steps ? i / steps : 0));
+      if (x >= 0 && x < EW && y >= 0 && y < EH) bits[y * EW + x] = 1;
+    }
+  }
+
+  function etchSync() {
+    fetch('/etch').then(function (r) {
+      if (r.status === 503) throw new Error('off');
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    }).then(function (st) {
+      EW = st.w; EH = st.h;
+      ec.width = EW * ES; ec.height = EH * ES;
+      var raw = atob(st.pixels_b64);
+      var bytes = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      var n = 0;
+      for (var b = 0; b < bytes.length; b++) for (var k = 7; k >= 0 && n < EW * EH; k--) bits[n++] = (bytes[b] >> k) & 1;
+      ex = st.x; ey = st.y;
+      etchRender();
+    }).catch(function (e) {
+      say(e.message === 'off' ? 'etch app is off — add etch to LEDBOARD_APPS' : 'etch sync failed, retrying', false);
+    });
+  }
+
+  function etchPost(dx, dy) {
+    // optimistic: ink locally so the knob feels instant, server stays authoritative
+    var nx = Math.max(0, Math.min(EW - 1, ex + dx));
+    var ny = Math.max(0, Math.min(EH - 1, ey + dy));
+    etchLine(ex, ey, nx, ny);
+    ex = nx; ey = ny;
+    etchRender();
+    fetch('/etch/move', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dx: dx, dy: dy }) })
+      .then(function (r) {
+        if (!r.ok) { etchSync(); return null; }
+        return r.json();
+      })
+      .then(function (j) {
+        if (j) { ex = j.x; ey = j.y; etchRender(); }
+      })
+      .catch(function () {});
+  }
+
+  function etchStep(axis, n) {
+    // batch into server-sized chunks; each POST is one straight segment
+    while (n !== 0) {
+      var chunk = Math.max(-5, Math.min(5, n));
+      n -= chunk;
+      if (axis === 'x') etchPost(chunk, 0);
+      else etchPost(0, -chunk); // drag up = stylus up
+    }
+  }
+
+  function makeKnob(id, dialId, axis) {
+    var el = document.getElementById(id), dial = document.getElementById(dialId);
+    var angle = 0, acc = 0, dragging = false, lastY = 0;
+    var PX_PER_STEP = 10;
+    function turn(n) {
+      if (!n) return;
+      angle = (angle + n * 18) % 360;
+      dial.style.transform = 'rotate(' + angle + 'deg)';
+      etchStep(axis, n);
+    }
+    el.addEventListener('pointerdown', function (e) {
+      dragging = true; lastY = e.clientY; acc = 0;
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      acc += lastY - e.clientY; // up = clockwise = +
+      lastY = e.clientY;
+      var n = Math.trunc(acc / PX_PER_STEP);
+      if (n !== 0) { acc -= n * PX_PER_STEP; turn(n); }
+    });
+    ['pointerup', 'pointercancel'].forEach(function (ev) {
+      el.addEventListener(ev, function () { dragging = false; acc = 0; });
+    });
+    el.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      turn(e.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
+  }
+  makeKnob('knob-x', 'dial-x', 'x');
+  makeKnob('knob-y', 'dial-y', 'y');
+
+  var frame = document.getElementById('etch-frame');
+  var shaking = false;
+  function shakeClear(why) {
+    if (shaking) return;
+    shaking = true;
+    frame.classList.remove('shaking');
+    void frame.offsetWidth; // restart the animation
+    frame.classList.add('shaking');
+    fetch('/etch/clear', { method: 'POST' }).then(function () {
+      say(why || 'shaken clean', true);
+      etchSync();
+    }).catch(function () { say('shake failed', false); })
+    .finally(function () { setTimeout(function () { shaking = false; }, 600); });
+  }
+  document.getElementById('etch-shake').addEventListener('click', function () { shakeClear('shaken clean'); });
+
+  // physical shake: rapid side-to-side drags on the frame (not the knobs)
+  var trail = [], downPos = null, coolUntil = 0;
+  frame.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.knob') || e.target.closest('button')) return;
+    downPos = { x: e.clientX, t: performance.now() };
+    trail = [{ x: e.clientX, t: performance.now() }];
+  });
+  frame.addEventListener('pointermove', function (e) {
+    if (!downPos) return;
+    if (e.target.closest && e.target.closest('.knob')) return;
+    var now = performance.now();
+    trail.push({ x: e.clientX, t: now });
+    while (trail.length && now - trail[0].t > 900) trail.shift();
+    var reversals = 0;
+    for (var i = 2; i < trail.length; i++) {
+      var d1 = trail[i - 1].x - trail[i - 2].x, d2 = trail[i].x - trail[i - 1].x;
+      if (Math.abs(d1) > 8 && Math.abs(d2) > 8 && ((d1 > 0) !== (d2 > 0))) reversals++;
+    }
+    var span = Math.max.apply(null, trail.map(function (p) { return p.x; })) -
+               Math.min.apply(null, trail.map(function (p) { return p.x; }));
+    if (reversals >= 4 && span > 120 && now > coolUntil) {
+      coolUntil = now + 1500;
+      downPos = null; trail = [];
+      shakeClear('shake detected — cleared');
+    }
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+    frame.addEventListener(ev, function () { downPos = null; });
+  });
+
+  etchRender();
+  setInterval(function () { if (!tabEtch.hidden) etchSync(); }, 5000);
 })();
 </script>
 </body>

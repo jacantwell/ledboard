@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ledboard import __version__
+from ledboard.apps.etch import EtchApp
 from ledboard.apps.text import TextApp
 from ledboard.auth import ClerkVerifier, require_user
 from ledboard.canvas import parse_color
@@ -29,6 +30,11 @@ class TextIn(BaseModel):
     text: str = Field(min_length=1)
     color: str | None = None
     duration_s: float | None = Field(default=None, gt=0)  # None: the board's default
+
+
+class EtchMove(BaseModel):
+    dx: int = Field(default=0, ge=-32, le=32)
+    dy: int = Field(default=0, ge=-32, le=32)
 
 
 class RateLimiter:
@@ -77,6 +83,7 @@ def create_api(
     store: FrameStore,
     text_app: TextApp | None,
     verifier: ClerkVerifier | None = None,
+    etch_app: EtchApp | None = None,
 ) -> FastAPI:
     app = FastAPI(title="ledboard", version=__version__)
     limiter = RateLimiter(settings.rate_limit_per_min)
@@ -141,6 +148,9 @@ def create_api(
             f'POST /text  with a plain-text body or {{"text": "...", "color": "#hex"}}\n'
             f'            "duration_s": seconds to show it, max {settings.text_max_duration_s:g}\n'
             f"            Authorization: Bearer <clerk jwt> when LEDBOARD_AUTH_ISSUER is set\n"
+            f"GET  /etch  etch-a-sketch state (background layer, bus/text overwrite it)\n"
+            f'POST /etch/move {{"dx": 1, "dy": 0}}  turn the knobs, draws live\n'
+            f"POST /etch/clear  shake to wipe\n"
             f"GET  /sim   to watch the board in a browser\n"
             f"GET  /healthz\n"
         )
@@ -148,6 +158,27 @@ def create_api(
     @app.get("/sim", response_class=HTMLResponse)
     def sim() -> str:
         return SIM_HTML
+
+    def _need_etch() -> EtchApp:
+        if etch_app is None:
+            raise HTTPException(503, "etch app is not enabled on this board")
+        return etch_app
+
+    @app.get("/etch")
+    def get_etch() -> dict:
+        return _need_etch().state()
+
+    @app.post("/etch/move")
+    def etch_move(move: EtchMove) -> dict:
+        if move.dx == 0 and move.dy == 0:
+            raise HTTPException(422, "dx/dy can't both be zero")
+        x, y = _need_etch().move(move.dx, move.dy)
+        return {"x": x, "y": y}
+
+    @app.post("/etch/clear")
+    def etch_clear() -> dict:
+        x, y = _need_etch().clear()
+        return {"cleared": True, "x": x, "y": y}
 
     @app.websocket("/sim/ws")
     async def sim_ws(ws: WebSocket) -> None:

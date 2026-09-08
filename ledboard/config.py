@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     display: DisplayKind = "web"
     width: int = 128
     height: int = 32
-    apps: str = "text,clock"
+    apps: str = "text,etch,clock"
 
     host: str = "0.0.0.0"
     port: int = 8080
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     bus_font: str = "5x7"
     bus_api_key: str = ""
     bus_api_url: str = "https://api.tfl.gov.uk"
+
+    etch_color: str = "#FFFFFF"
 
     rate_limit_per_min: int = 10
 
