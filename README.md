@@ -34,7 +34,8 @@ ledboard/
   daemon.py      wires everything, runs the scheduler thread + HTTP server
   scheduler.py   picks the highest-priority app that wants the screen, applies brightness, shows
   app.py         the App protocol every app implements
-  apps/          text (POST /text queue), bus (departure board), clock (idle), testpattern
+  apps/          text (POST /text queue), bus (departure board), etch (etch-a-sketch
+               background), clock (idle), testpattern
   schedule.py    time-of-day windows an app can gate itself on
   tfl.py         live bus arrivals for one stop, off the render thread
   canvas.py      numpy framebuffer + Pillow bitmap-font text helpers
@@ -71,6 +72,7 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_BUS_REFRESH_S` | `30` | the API caches for 30s |
 | `LEDBOARD_BUS_STALE_S` | `120` | after this the board yields to the clock |
 | `LEDBOARD_BUS_API_KEY` | *(none)* | optional, raises the TfL rate limit |
+| `LEDBOARD_ETCH_COLOR` | `#FFFFFF` | stylus colour for the etch-a-sketch background |
 
 ## Auth
 
@@ -105,12 +107,27 @@ allows 50 requests a minute unauthenticated and the app polls twice a minute.
 `LEDBOARD_BUS_WINDOWS` restricts it to times of day, e.g. `07:00-10:00,17:00-20:00`. Empty means
 always on. Outside a window the poll thread doesn't even ask, so nothing hits the API at 3am.
 
+## Etch-a-sketch
+
+The `etch` app is the background layer (priority 10, above the clock, below bus and
+text). The `/sim` page has an **etch-a-sketch** tab: left knob draws ◀ ▶, right knob
+draws ▲ ▼, and it inks live onto the board. The knobs are the only way to draw —
+drag them (or scroll over them) with the mouse. Shake the frame — grab it and
+waggle side-to-side, or hit **shake to clear** — to wipe the screen. Bus times and
+messages overwrite the sketch while they're showing, then it comes back intact.
+
+```
+POST /etch/move {"dx": 1, "dy": 0}   # a knob nudge, each axis clamped to ±32
+POST /etch/clear                     # shake
+GET  /etch                           # {w, h, x, y, lit, pixels_b64}
+```
+
 ## Writing an app
 
 ```python
 class MyApp:
     name = "my"
-    priority = 20  # text is 50, bus is 20, clock is 0
+    priority = 20  # text is 50, bus is 20, etch is 10, clock is 0
 
     def start(self): ...
     def stop(self): ...

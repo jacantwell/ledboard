@@ -1,6 +1,7 @@
 from ledboard.app import App
 from ledboard.apps.bus import BusApp
 from ledboard.apps.clock import ClockApp
+from ledboard.apps.etch import EtchApp
 from ledboard.apps.testpattern import TestPatternApp
 from ledboard.apps.text import TextApp
 from ledboard.config import Settings
@@ -19,6 +20,7 @@ def build_apps(settings: Settings) -> dict[str, App]:
             default_color=settings.text_color,
         ),
         "clock": lambda: ClockApp(w, h),
+        "etch": lambda: EtchApp(w, h, color=settings.etch_color),
         "testpattern": lambda: TestPatternApp(w, h),
         "bus": lambda: BusApp(
             w,
@@ -42,4 +44,4 @@ def build_apps(settings: Settings) -> dict[str, App]:
     return apps
 
 
-__all__ = ["BusApp", "ClockApp", "TestPatternApp", "TextApp", "build_apps"]
+__all__ = ["BusApp", "ClockApp", "EtchApp", "TestPatternApp", "TextApp", "build_apps"]
