@@ -8,6 +8,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -164,18 +165,41 @@ def create_api(
             raise HTTPException(503, "etch app is not enabled on this board")
         return etch_app
 
-    @app.get("/etch")
+    # Etch is anonymous (no login), but only the home-dash frontend may use it.
+    # Browsers attest this with Origin/Referer, matched against
+    # LEDBOARD_AUTH_AUTHORIZED_PARTIES; empty leaves it open, like `make dev`.
+    allowed_origins = {p.rstrip("/") for p in settings.auth_authorized_party_list}
+
+    def _need_frontend(request: Request) -> None:
+        if not allowed_origins:
+            return
+        for header in (request.headers.get("origin"), request.headers.get("referer")):
+            if not header:
+                continue
+            parts = urlsplit(header)
+            origin = (
+                f"{parts.scheme}://{parts.netloc}".rstrip("/")
+                if parts.netloc
+                else header.rstrip("/")
+            )
+            if origin in allowed_origins:
+                return
+        raise HTTPException(403, "etch is only available from the home-dash frontend")
+
+    frontend = Depends(_need_frontend)
+
+    @app.get("/etch", dependencies=[frontend])
     def get_etch() -> dict:
         return _need_etch().state()
 
-    @app.post("/etch/move")
+    @app.post("/etch/move", dependencies=[frontend])
     def etch_move(move: EtchMove) -> dict:
         if move.dx == 0 and move.dy == 0:
             raise HTTPException(422, "dx/dy can't both be zero")
         x, y = _need_etch().move(move.dx, move.dy)
         return {"x": x, "y": y}
 
-    @app.post("/etch/clear")
+    @app.post("/etch/clear", dependencies=[frontend])
     def etch_clear() -> dict:
         x, y = _need_etch().clear()
         return {"cleared": True, "x": x, "y": y}
