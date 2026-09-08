@@ -65,7 +65,7 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_TEXT_MAX_DURATION_S` | `300` | reject a longer `duration_s` |
 | `LEDBOARD_RATE_LIMIT_PER_MIN` | `10` | per user (`sub`), or per client IP when open |
 | `LEDBOARD_AUTH_ISSUER` | *(empty, open)* | Clerk frontend API url, e.g. `https://xxx.clerk.accounts.dev` |
-| `LEDBOARD_AUTH_AUTHORIZED_PARTIES` | *(empty, any)* | comma list of origins allowed in `azp` |
+| `LEDBOARD_AUTH_AUTHORIZED_PARTIES` | *(empty, any)* | comma list of origins allowed in `azp`, and in etch `Origin`/`Referer` |
 | `LEDBOARD_BUS_STOP_ID` | `59378` | the code on the pole, or a naptan id |
 | `LEDBOARD_BUS_ROUTES` | *(all)* | comma list, e.g. `12,36,171` |
 | `LEDBOARD_BUS_WINDOWS` | *(always)* | e.g. `07:00-10:00,17:00-20:00`, local time |
@@ -83,6 +83,12 @@ in `LEDBOARD_AUTH_AUTHORIZED_PARTIES` when that list is non-empty. Anything else
 
 An empty `LEDBOARD_AUTH_ISSUER` leaves both endpoints open, which is what `make dev` wants; the
 daemon logs a warning at startup so you notice on the Pi. `/healthz`, `/`, `/sim` are always open.
+
+`/etch`, `/etch/move` and `/etch/clear` take no login, but only the home-dash frontend may
+call them: the request's `Origin`/`Referer` must match an entry in
+`LEDBOARD_AUTH_AUTHORIZED_PARTIES`, otherwise it's a 403. (The home-dash backend forwards the
+browser's headers when it proxies, so its calls pass the same check.) Empty means don't
+check, which is what `make dev` wants.
 
 ```sh
 uv run ledboard send "hi" --token "$(pbpaste)"   # or export LEDBOARD_TOKEN=...

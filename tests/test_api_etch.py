@@ -81,3 +81,75 @@ def test_sim_page_has_the_etch_tab(client: TestClient):
     assert "etch-a-sketch" in html, "the tab is there"
     assert "knob-x" in html and "knob-y" in html, "both knobs are there"
     assert "shake" in html.lower(), "shake-to-clear is there"
+
+
+FRONTEND_ORIGIN = "https://home-dash.example"
+
+
+@pytest.fixture
+def gated_client(store: FrameStore, etch_app: EtchApp) -> TestClient:
+    settings = Settings(
+        _env_file=None,
+        width=WIDTH,
+        height=HEIGHT,
+        auth_authorized_parties=f"{FRONTEND_ORIGIN},http://localhost:3000",
+    )
+    return TestClient(create_api(settings, store, None, etch_app=etch_app))
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/etch", None),
+        ("POST", "/etch/move", {"dx": 1}),
+        ("POST", "/etch/clear", None),
+    ],
+)
+def test_etch_is_open_without_configured_parties(
+    client: TestClient, method: str, path: str, payload
+):
+    assert client.request(method, path, json=payload).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/etch", None),
+        ("POST", "/etch/move", {"dx": 1}),
+        ("POST", "/etch/clear", None),
+    ],
+)
+def test_etch_rejects_requests_without_a_frontend_origin(
+    gated_client: TestClient, method: str, path: str, payload
+):
+    r = gated_client.request(method, path, json=payload)
+    assert r.status_code == 403, f"{method} {path} needs a frontend Origin"
+    assert "home-dash frontend" in r.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/etch", None),
+        ("POST", "/etch/move", {"dx": 1}),
+        ("POST", "/etch/clear", None),
+    ],
+)
+def test_etch_rejects_a_foreign_origin(gated_client: TestClient, method: str, path: str, payload):
+    r = gated_client.request(method, path, json=payload, headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+
+
+def test_etch_accepts_the_frontend_origin(gated_client: TestClient):
+    assert gated_client.get("/etch", headers={"Origin": FRONTEND_ORIGIN}).status_code == 200
+    assert (
+        gated_client.post(
+            "/etch/move", json={"dx": 1}, headers={"Origin": FRONTEND_ORIGIN}
+        ).status_code
+        == 200
+    )
+
+
+def test_etch_accepts_a_frontend_referer(gated_client: TestClient):
+    r = gated_client.get("/etch", headers={"Referer": f"{FRONTEND_ORIGIN}/etch"})
+    assert r.status_code == 200, "the page path on the referer is fine"
