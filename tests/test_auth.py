@@ -119,8 +119,56 @@ def test_verify_tolerates_a_trailing_slash_on_the_issuer(jwks: FakeJWKS, private
 
 def test_jwks_client_is_built_lazily_from_the_issuer():
     v = ClerkVerifier(ISSUER, [])
-    assert v._jwks is None, "nothing is built until a token shows up"
-    assert v.jwks.uri == f"{ISSUER}/.well-known/jwks.json", "the jwks url hangs off the issuer"
+    assert v._jwks == {}, "nothing is built until a token shows up"
+    assert v.jwks_for(ISSUER).uri == f"{ISSUER}/.well-known/jwks.json", (
+        "the jwks url hangs off the issuer"
+    )
+
+
+PROD_ISSUER = "https://clerk.worm.beer"
+
+
+@pytest.mark.parametrize("iss", [ISSUER, PROD_ISSUER])
+def test_verify_accepts_a_token_from_any_configured_issuer(jwks: FakeJWKS, private_key, iss):
+    v = ClerkVerifier([ISSUER, PROD_ISSUER], PARTIES, jwks_client=jwks)
+    assert v.verify(mint(private_key, iss=iss))["sub"] == "user_123"
+
+
+@pytest.mark.parametrize(
+    "iss",
+    ["https://someone-else.clerk.accounts.dev", "", None],
+    ids=["unknown issuer", "empty issuer", "no issuer"],
+)
+def test_verify_rejects_an_issuer_outside_the_list(jwks: FakeJWKS, private_key, iss):
+    v = ClerkVerifier([ISSUER, PROD_ISSUER], PARTIES, jwks_client=jwks)
+    with pytest.raises(AuthError, match="issuer"):
+        v.verify(mint(private_key, iss=iss))
+
+
+def test_each_issuer_gets_its_own_jwks_url():
+    v = ClerkVerifier([ISSUER, f" {PROD_ISSUER}/ "], [])
+    assert v.issuers == [ISSUER, PROD_ISSUER], "whitespace and trailing slashes normalised"
+    assert v.jwks_for(PROD_ISSUER).uri == f"{PROD_ISSUER}/.well-known/jwks.json"
+    assert v.jwks_for(ISSUER) is not v.jwks_for(PROD_ISSUER)
+
+
+@pytest.mark.parametrize("raw", ["", " , "], ids=["empty", "only separators"])
+def test_verifier_refuses_to_start_with_no_issuer(raw):
+    with pytest.raises(ValueError):
+        ClerkVerifier(raw.split(","), [])
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("", []),
+        (ISSUER, [ISSUER]),
+        (f"{ISSUER}, {PROD_ISSUER}", [ISSUER, PROD_ISSUER]),
+    ],
+    ids=["empty", "single", "two"],
+)
+def test_settings_split_the_issuer_list(raw, expected):
+    assert Settings(_env_file=None, auth_issuer=raw).auth_issuer_list == expected
 
 
 @pytest.mark.parametrize(

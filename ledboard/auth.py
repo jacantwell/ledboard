@@ -1,7 +1,8 @@
 """Clerk session JWT verification for the text endpoints.
 
 A `ClerkVerifier` checks signature (via the issuer's JWKS), exp/iat, issuer and optionally the
-`azp` origin. With no issuer configured the endpoints stay open, like they were before."""
+`azp` origin. It accepts tokens from any of its issuers, so one Pi can serve both a Clerk
+production instance and a development one. With no issuer configured the endpoints stay open."""
 
 import logging
 
@@ -18,31 +19,46 @@ class AuthError(Exception):
 class ClerkVerifier:
     def __init__(
         self,
-        issuer: str,
+        issuers: str | list[str],
         authorized_parties: list[str] | None = None,
         jwks_client: jwt.PyJWKClient | None = None,
     ) -> None:
-        self.issuer = issuer.rstrip("/")
+        if isinstance(issuers, str):
+            issuers = [issuers]
+        self.issuers = [i.strip().rstrip("/") for i in issuers if i.strip()]
+        if not self.issuers:
+            raise ValueError("at least one issuer is required")
         self.authorized_parties = list(authorized_parties or [])
-        self._jwks = jwks_client
+        # One JWKS client per issuer, built on first use. A client passed in serves them all.
+        self._jwks: dict[str, jwt.PyJWKClient] = (
+            dict.fromkeys(self.issuers, jwks_client) if jwks_client else {}
+        )
 
-    @property
-    def jwks(self) -> jwt.PyJWKClient:
-        if self._jwks is None:
-            self._jwks = jwt.PyJWKClient(f"{self.issuer}/.well-known/jwks.json", cache_keys=True)
-        return self._jwks
+    def jwks_for(self, issuer: str) -> jwt.PyJWKClient:
+        if issuer not in self._jwks:
+            self._jwks[issuer] = jwt.PyJWKClient(f"{issuer}/.well-known/jwks.json", cache_keys=True)
+        return self._jwks[issuer]
 
-    def _signing_key(self, token: str):
-        return self.jwks.get_signing_key_from_jwt(token).key
+    def _issuer_of(self, token: str) -> str:
+        """The `iss` claim, before verification, so the right JWKS can be picked."""
+        try:
+            claims = jwt.decode(token, options={"verify_signature": False})
+        except jwt.PyJWTError as e:
+            raise AuthError(f"invalid token: {e}") from e
+        issuer = str(claims.get("iss", "")).rstrip("/")
+        if issuer not in self.issuers:
+            raise AuthError(f"invalid token: issuer {issuer!r} is not trusted")
+        return issuer
 
     def verify(self, token: str) -> dict:
+        issuer = self._issuer_of(token)
         try:
-            key = self._signing_key(token)
+            key = self.jwks_for(issuer).get_signing_key_from_jwt(token).key
             claims = jwt.decode(
                 token,
                 key,
                 algorithms=["RS256"],
-                issuer=self.issuer,
+                issuer=issuer,
                 options={"require": ["exp", "iat", "sub"]},
                 leeway=5,
             )
