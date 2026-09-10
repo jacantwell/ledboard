@@ -88,8 +88,8 @@ def create_api(
 ) -> FastAPI:
     app = FastAPI(title="ledboard", version=__version__)
     limiter = RateLimiter(settings.rate_limit_per_min)
-    if verifier is None and settings.auth_issuer:
-        verifier = ClerkVerifier(settings.auth_issuer, settings.auth_authorized_party_list)
+    if verifier is None and settings.auth_issuer_list:
+        verifier = ClerkVerifier(settings.auth_issuer_list, settings.auth_authorized_party_list)
     if verifier is None:
         log.warning("LEDBOARD_AUTH_ISSUER is empty: POST /text accepts anyone")
     user = Depends(require_user(verifier))

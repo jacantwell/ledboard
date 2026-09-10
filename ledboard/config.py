@@ -40,7 +40,8 @@ class Settings(BaseSettings):
 
     rate_limit_per_min: int = 10
 
-    # Clerk frontend API url, e.g. https://xxx.clerk.accounts.dev. Empty leaves POST /text open.
+    # Comma list of Clerk frontend API urls whose tokens are trusted, e.g.
+    # https://clerk.example.com,https://xxx.clerk.accounts.dev. Empty leaves POST /text open.
     auth_issuer: str = ""
     auth_authorized_parties: str = ""  # comma list of origins allowed in azp; empty = don't check
 
@@ -56,6 +57,10 @@ class Settings(BaseSettings):
     @property
     def bus_route_names(self) -> list[str]:
         return [r.strip() for r in self.bus_routes.split(",") if r.strip()]
+
+    @property
+    def auth_issuer_list(self) -> list[str]:
+        return [i.strip() for i in self.auth_issuer.split(",") if i.strip()]
 
     @property
     def auth_authorized_party_list(self) -> list[str]:

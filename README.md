@@ -64,7 +64,7 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_TEXT_DWELL_S` | `4` | how long short text holds when no `duration_s` is sent |
 | `LEDBOARD_TEXT_MAX_DURATION_S` | `60` | reject a longer `duration_s` |
 | `LEDBOARD_RATE_LIMIT_PER_MIN` | `10` | per user (`sub`), or per client IP when open |
-| `LEDBOARD_AUTH_ISSUER` | *(empty, open)* | Clerk frontend API url, e.g. `https://xxx.clerk.accounts.dev` |
+| `LEDBOARD_AUTH_ISSUER` | *(empty, open)* | comma list of trusted Clerk frontend API urls, e.g. `https://clerk.worm.beer,https://xxx.clerk.accounts.dev` |
 | `LEDBOARD_AUTH_AUTHORIZED_PARTIES` | *(empty, any)* | comma list of origins allowed in `azp`, and in etch `Origin`/`Referer` |
 | `LEDBOARD_BUS_STOP_ID` | `59378` | the code on the pole, or a naptan id |
 | `LEDBOARD_BUS_ROUTES` | *(all)* | comma list, e.g. `12,36,171` |
@@ -77,9 +77,11 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 ## Auth
 
 `POST /text` and `DELETE /text` take a Clerk session JWT as `Authorization: Bearer <token>`.
-The daemon fetches the issuer's JWKS once (cached), checks the RS256 signature, `exp`/`iat`,
-that `iss` matches `LEDBOARD_AUTH_ISSUER`, and that `azp` (the origin that minted the token) is
+The daemon fetches each issuer's JWKS once (cached), checks the RS256 signature, `exp`/`iat`,
+that `iss` is one of `LEDBOARD_AUTH_ISSUER`, and that `azp` (the origin that minted the token) is
 in `LEDBOARD_AUTH_AUTHORIZED_PARTIES` when that list is non-empty. Anything else is a 401.
+`LEDBOARD_AUTH_ISSUER` takes a comma list because the Pi is shared: worm.beer signs in against
+Clerk's production instance and staging against the development one, and both post here.
 
 An empty `LEDBOARD_AUTH_ISSUER` leaves both endpoints open, which is what `make dev` wants; the
 daemon logs a warning at startup so you notice on the Pi. `/healthz`, `/`, `/sim` are always open.
