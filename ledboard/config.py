@@ -38,6 +38,14 @@ class Settings(BaseSettings):
 
     etch_color: str = "#FFFFFF"
 
+    # A Google Calendar shared with the service account whose json key is at calendar_credentials.
+    calendar_id: str = ""
+    calendar_credentials: str = ""
+    calendar_count: int = 2
+    calendar_refresh_s: float = 300.0
+    calendar_stale_s: float = 3600.0
+    calendar_color: str = "#FF8C00"
+
     rate_limit_per_min: int = 10
 
     # Comma list of Clerk frontend API urls whose tokens are trusted, e.g.
