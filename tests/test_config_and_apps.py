@@ -1,6 +1,6 @@
 import pytest
 
-from ledboard.apps import BusApp, ClockApp, TextApp, build_apps
+from ledboard.apps import BusApp, CalendarApp, ClockApp, TextApp, build_apps
 from ledboard.apps import TestPatternApp as PatternApp
 from ledboard.config import Settings
 
@@ -88,3 +88,87 @@ def test_build_apps_rejects_a_bad_bus_window():
 def test_build_apps_rejects_an_unknown_app():
     with pytest.raises(ValueError, match="unknown app"):
         build_apps(Settings(_env_file=None, apps="disco"))
+
+
+def calendar_settings(**kwargs) -> Settings:
+    kwargs.setdefault("calendar_id", "family@group.calendar.google.com")
+    kwargs.setdefault("calendar_credentials", "/etc/ledboard/sa.json")
+    return Settings(_env_file=None, apps="calendar", width=64, height=16, **kwargs)
+
+
+def test_build_apps_makes_a_calendar_when_configured():
+    apps = build_apps(calendar_settings())
+    assert list(apps) == ["calendar"], "only the named apps are built"
+    assert isinstance(apps["calendar"], CalendarApp), "calendar builds a CalendarApp"
+    assert (apps["calendar"].width, apps["calendar"].height) == (64, 16), "panel size passed down"
+
+
+def test_build_apps_does_not_touch_the_network_or_key_file():
+    app = build_apps(calendar_settings(calendar_credentials="/nope/missing.json"))["calendar"]
+    assert app.snapshot(0.0) == [], "nothing is fetched until the poll thread starts"
+
+
+def test_build_apps_wires_the_calendar_client():
+    client = build_apps(calendar_settings())["calendar"]._fetch.__self__
+    assert client.calendar_id == "family@group.calendar.google.com", "the id reaches the client"
+    assert client.credentials_path == "/etc/ledboard/sa.json", "and so does the key file path"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"calendar_id": ""},
+        {"calendar_credentials": ""},
+        {"calendar_id": "", "calendar_credentials": ""},
+    ],
+    ids=["no-id", "no-creds", "neither"],
+)
+def test_build_apps_rejects_a_half_configured_calendar(overrides):
+    with pytest.raises(ValueError, match="calendar needs"):
+        build_apps(calendar_settings(**overrides))
+
+
+def test_build_apps_passes_calendar_settings_through():
+    app = build_apps(
+        calendar_settings(
+            calendar_count=3,
+            calendar_refresh_s=60.0,
+            calendar_stale_s=900.0,
+            calendar_color="#00ff00",
+        )
+    )["calendar"]
+    assert app.count == 3, "the event count comes from settings"
+    assert app.refresh_s == 60.0, "the refresh interval comes from settings"
+    assert app.stale_s == 900.0, "the staleness cutoff comes from settings"
+    assert app.color == (0, 255, 0), "the colour comes from settings"
+
+
+@pytest.mark.parametrize(
+    "field,env,expected",
+    [
+        ("calendar_id", "abc@group.calendar.google.com", "abc@group.calendar.google.com"),
+        ("calendar_credentials", "/etc/sa.json", "/etc/sa.json"),
+        ("calendar_count", "3", 3),
+        ("calendar_refresh_s", "60", 60.0),
+        ("calendar_stale_s", "900", 900.0),
+        ("calendar_color", "#00ff00", "#00ff00"),
+    ],
+)
+def test_calendar_settings_read_the_env(monkeypatch: pytest.MonkeyPatch, field, env, expected):
+    monkeypatch.setenv(f"LEDBOARD_{field.upper()}", env)
+    assert getattr(Settings(_env_file=None), field) == expected, f"{field} comes from the env"
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("calendar_id", ""),
+        ("calendar_credentials", ""),
+        ("calendar_count", 2),
+        ("calendar_refresh_s", 300.0),
+        ("calendar_stale_s", 3600.0),
+        ("calendar_color", "#FF8C00"),
+    ],
+)
+def test_calendar_setting_defaults(field, expected):
+    assert getattr(Settings(_env_file=None), field) == expected, f"{field} defaults sensibly"

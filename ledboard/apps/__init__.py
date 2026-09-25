@@ -1,10 +1,12 @@
 from ledboard.app import App
 from ledboard.apps.bus import BusApp
+from ledboard.apps.calendar import CalendarApp
 from ledboard.apps.clock import ClockApp
 from ledboard.apps.etch import EtchApp
 from ledboard.apps.testpattern import TestPatternApp
 from ledboard.apps.text import TextApp
 from ledboard.config import Settings
+from ledboard.gcal import CalendarClient
 from ledboard.schedule import Windows
 
 
@@ -35,6 +37,7 @@ def build_apps(settings: Settings) -> dict[str, App]:
             api_key=settings.bus_api_key,
             api_url=settings.bus_api_url,
         ),
+        "calendar": lambda: _calendar(settings),
     }
     apps: dict[str, App] = {}
     for name in settings.app_names:
@@ -44,4 +47,27 @@ def build_apps(settings: Settings) -> dict[str, App]:
     return apps
 
 
-__all__ = ["BusApp", "ClockApp", "EtchApp", "TestPatternApp", "TextApp", "build_apps"]
+def _calendar(settings: Settings) -> CalendarApp:
+    if not (settings.calendar_id and settings.calendar_credentials):
+        raise ValueError("calendar needs LEDBOARD_CALENDAR_ID and LEDBOARD_CALENDAR_CREDENTIALS")
+    client = CalendarClient(settings.calendar_id, settings.calendar_credentials)
+    return CalendarApp(
+        settings.width,
+        settings.height,
+        fetch=client.fetch,
+        count=settings.calendar_count,
+        refresh_s=settings.calendar_refresh_s,
+        stale_s=settings.calendar_stale_s,
+        color=settings.calendar_color,
+    )
+
+
+__all__ = [
+    "BusApp",
+    "CalendarApp",
+    "ClockApp",
+    "EtchApp",
+    "TestPatternApp",
+    "TextApp",
+    "build_apps",
+]
