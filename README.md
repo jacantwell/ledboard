@@ -34,10 +34,11 @@ ledboard/
   daemon.py      wires everything, runs the scheduler thread + HTTP server
   scheduler.py   picks the highest-priority app that wants the screen, applies brightness, shows
   app.py         the App protocol every app implements
-  apps/          text (POST /text queue), bus (departure board), etch (etch-a-sketch
-               background), clock (idle), testpattern
+  apps/          text (POST /text queue), bus (departure board), calendar (next events),
+               etch (etch-a-sketch background), clock (idle), testpattern
   schedule.py    time-of-day windows an app can gate itself on
   tfl.py         live bus arrivals for one stop, off the render thread
+  gcal.py        upcoming Google Calendar events, read as a service account
   canvas.py      numpy framebuffer + Pillow bitmap-font text helpers
   fonts/         X11 misc-fixed BDF fonts, public domain, compiled on first use
   display/       hw (Piomatter on /dev/pio0), png, array; FrameStore feeds the web sim
@@ -73,6 +74,11 @@ Everything is an env var with the `LEDBOARD_` prefix (or a `.env` file). Default
 | `LEDBOARD_BUS_STALE_S` | `120` | after this the board yields to the clock |
 | `LEDBOARD_BUS_API_KEY` | *(none)* | optional, raises the TfL rate limit |
 | `LEDBOARD_ETCH_COLOR` | `#FFFFFF` | stylus colour for the etch-a-sketch background |
+| `LEDBOARD_CALENDAR_ID` | *(none)* | the calendar's id, `...@group.calendar.google.com` |
+| `LEDBOARD_CALENDAR_CREDENTIALS` | *(none)* | path to the service account's json key |
+| `LEDBOARD_CALENDAR_COUNT` | `2` | events on screen, two rows each |
+| `LEDBOARD_CALENDAR_REFRESH_S` | `300` | poll interval |
+| `LEDBOARD_CALENDAR_STALE_S` | `3600` | after this the board yields to the clock |
 
 ## Auth
 
@@ -114,6 +120,29 @@ allows 50 requests a minute unauthenticated and the app polls twice a minute.
 
 `LEDBOARD_BUS_WINDOWS` restricts it to times of day, e.g. `07:00-10:00,17:00-20:00`. Empty means
 always on. Outside a window the poll thread doesn't even ask, so nothing hits the API at 3am.
+
+## Calendar
+
+The next `LEDBOARD_CALENDAR_COUNT` events on one Google Calendar, a dim date line over the title:
+
+```
+Today 19:30
+Pub quiz @ The Crown
+Sun 4 Oct 14:00
+Gemma's birthday drinks i
+```
+
+Priority 15: the bus board beats it in its window, it beats etch and the clock. It yields when
+nothing is coming up. Recurring events are expanded by Google (`singleEvents=true`).
+
+It reads the calendar as a Google Cloud service account, so no one has to log in on the Pi:
+
+1. Create a service account in a Cloud project with the Google Calendar API enabled, and download
+   a json key for it.
+2. In the calendar's settings, share it with the service account's `client_email`
+   ("See all event details" is enough).
+3. Copy the key to the Pi and point `LEDBOARD_CALENDAR_CREDENTIALS` at it, and set
+   `LEDBOARD_CALENDAR_ID` to the "Calendar ID" from the calendar's settings.
 
 ## Etch-a-sketch
 
